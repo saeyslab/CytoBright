@@ -55,11 +55,14 @@ meta$BrightnessLevel <- expected_brightness[meta$Fluorochrome, "Brightness"]
 ### Defining pregating steps
 
 We will also apply some pregating to only work on events of interest.
-This gating information is stored in a list structure. The marker_values 
-argument corresponds to the arguments for the estimate_gate function, where 
-flowDensity::deGate is used to try to find a possible cutoff in the range of 
-e.g. the minimal value plus or minus the range_min. If no value is found in 
-that range, the passed minimal value will be taken instead. 
+This gating information is stored in a list of lists structure, to allow
+multiple consecutive gating steps. Each gating step should be described by a 
+list which corresponds with the arguments for the estimate_gate function,
+of which the `marker_values` argument is of main interest, giving estimates
+for the gate boundaries. flowDensity::deGate is used to try to find a possible 
+cutoff in the range of e.g. the minimal value plus or minus the range_min. 
+If no value is found in that range, the specified minimal value will be taken 
+instead. 
 ```{r}
 gating_info <- list(list(marker_values = list(`FSC-A` = c(min = 60000, 
                                                           range_min = 50000, 
