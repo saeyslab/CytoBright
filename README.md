@@ -121,7 +121,7 @@ ggplot2::ggsave("preprocessing_BUV395.png",
                                   nrow = 1),
                 width = 21, height = 7)
 ```
-[preprocessing_BUV395](inst/extdata/example_data/with_unstained_results/preprocessing_BUV395.png)
+![preprocessing_BUV395](inst/extdata/example_data/with_unstained_results/preprocessing_BUV395.png)
 
 With the `plot_brightness` function an overview of the brightness of the
 different fluorochromes can be generated.
@@ -131,4 +131,4 @@ ggplot2::ggsave("brightness_overview.png",
                 plot_brightness(brightness$SI, brightness$cells),
                 width = 10, height = 5)
 ```
-[brightness_overview](inst/extdata/example_data/with_unstained_results/brightness_overview.png)
+![brightness_overview](inst/extdata/example_data/with_unstained_results/brightness_overview.png)
