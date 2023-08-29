@@ -19,8 +19,9 @@ find_cutoff_FMO <- function(ff,
 #' Decide positivity cutoff with flowDensity
 #'
 #' Uses the deGate function from the flowDensity package.
-#' Will apply a transformation with estimateLogicle and estimate in the
-#' transformed space, but returns the cutoff in the original space.
+#' By default, this function will apply a transformation with estimateLogicle
+#' and estimate the cutoff in the transformed space, but returns the value
+#' in the original space.
 #'
 #' @param ff FlowFrame to use
 #' @param detector Column name of the flow frame
@@ -28,8 +29,9 @@ find_cutoff_FMO <- function(ff,
 #'                  If FALSE, no transform is applied. If TRUE (default),
 #'                  flowcore::estimateLogicle is called, and if this fails, the
 #'                  default logicleTransform() is applied. If a transformList,
-#'                  this transformList is applied.
-#' @param ... other parameters to be passed to flowDensity
+#'                  this transformList is applied. Note that the value is
+#'                  returned in the original space.
+#' @param ... Other parameters to be passed to flowDensity
 #'
 #' @importFrom methods is
 #' @importFrom flowDensity deGate
@@ -66,6 +68,8 @@ find_cutoff_flowDensity <- function(ff, detector, transform = TRUE, ...) {
   )
 
   if (is(transform, "transformList")) {
+    # Find value that corresponds to same quantile as the cutoff value
+    # To be transformation independent
     q <- stats::ecdf(flowCore::exprs(ff_t)[, detector])(cutoff)
     cutoff <- stats::quantile(flowCore::exprs(ff)[, detector], q)
   }
