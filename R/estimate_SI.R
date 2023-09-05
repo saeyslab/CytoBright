@@ -39,7 +39,7 @@ estimate_SI <- function(ff,
 
   pData <- Biobase::pData(flowCore::parameters(ff))
   limit <- pData[pData$name == detector, "maxRange"]
-  meta["Pctg_OutOfRange"] <- sum(flowCore::exprs(ff)[, detector] > limit) /
+  meta["Pctg_OutOfRange"] <- sum(flowCore::exprs(ff)[, detector] >= limit) /
     flowCore::nrow(ff)
 
   return(meta)

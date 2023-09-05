@@ -35,7 +35,7 @@ find_cutoff_FMO <- function(ff,
 #'
 #' @importFrom methods is
 #' @importFrom flowDensity deGate
-#' @importFrom flowCore estimateLogicle transform inverseLogicleTransform
+#' @importFrom flowCore estimateLogicle transform
 #'
 #' @export
 find_cutoff_flowDensity <- function(ff, detector, transform = TRUE, ...) {

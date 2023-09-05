@@ -13,6 +13,7 @@ estimate_brightness(
   return_cells = TRUE,
   seed = 1,
   comp = NULL,
+  transform = TRUE,
   unstained = NULL
 )
 }
@@ -35,6 +36,13 @@ The name corresponding to the channel.}
 \item{seed}{Seed for reproducability}
 
 \item{comp}{Compensation matrix.}
+
+\item{transform}{Can either be a logical value or a transformList.
+If FALSE, no transform is applied. If TRUE (default),
+flowcore::estimateLogicle is called, and if this fails, the
+default logicleTransform() is applied. If a transformList,
+this transformList is applied. Note that the value is
+returned in the original space.}
 
 \item{unstained}{If this parameter is provided, it should contain a path
 to an fcs file. The unstained population will then be

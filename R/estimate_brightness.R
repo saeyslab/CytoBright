@@ -15,6 +15,12 @@
 #' @param return_cells  Boolean. If true, a list with cell values are returned
 #' @param seed          Seed for reproducability
 #' @param comp          Compensation matrix.
+#' @param transform Can either be a logical value or a transformList.
+#'                  If FALSE, no transform is applied. If TRUE (default),
+#'                  flowcore::estimateLogicle is called, and if this fails, the
+#'                  default logicleTransform() is applied. If a transformList,
+#'                  this transformList is applied. Note that the value is
+#'                  returned in the original space.
 #' @param unstained     If this parameter is provided, it should contain a path
 #'                      to an fcs file. The unstained population will then be
 #'                      taken from this file rather than the single stain.
@@ -50,6 +56,7 @@ estimate_brightness <- function(single_stains,
                                 return_cells = TRUE,
                                 seed = 1,
                                 comp = NULL,
+                                transform = TRUE,
                                 unstained = NULL) {
   rownames(single_stains) <- single_stains$ID
   if (is.null(single_stains$Group)) single_stains$Group <- single_stains$ID
@@ -160,22 +167,29 @@ estimate_brightness <- function(single_stains,
         SI[sub_id, colnames(single_stains)] <- single_stains[sub_id, ]
       }
 
+      ff_tmp <- ff[selection, ]
+      if(length(row_ids) > 1){
+        # restore voltage which was lost in concatenation
+        # Thanks to Juan Hernandez
+        voltage_keyword <- paste0("$P", which(colnames(ff) == detector), "V")
+        orig_file <- flowCore::read.FCS(single_stains[row_ids[subset], "File"],
+                                        which.lines = 1)
+        flowCore::keyword(ff_tmp)[[voltage_keyword]] <-
+          flowCore::keyword(orig_file)[[voltage_keyword]]
+      }
+
       if (!is.null(unstained)) {
         cutoff <- find_cutoff_FMO(ff_unstained$flowFrame, detector, 0.995)
 
-        ff_tmp <- ff[selection, ]
         flowCore::exprs(ff_tmp) <- rbind(
           flowCore::exprs(ff_tmp),
           flowCore::exprs(ff_unstained$flowFrame)
         )
       } else {
-        cutoff <- find_cutoff_flowDensity(ff[selection, ],
-          detector = detector
-        )
-
-        ff_tmp <- ff[selection, ]
+        cutoff <- find_cutoff_flowDensity(ff_tmp,
+                                          detector = detector,
+                                          transform = transform)
       }
-
 
       SI_tmp <- estimate_SI(
         ff = ff_tmp,
