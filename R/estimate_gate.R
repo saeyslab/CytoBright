@@ -57,6 +57,8 @@ estimate_gate <- function(ff,
         marker_values[[m]][type] <- cutoff
       }
     }
+    if(!"plot_min" %in% names(marker_values[[m]])) marker_values[[m]]["plot_min"] <- NA
+    if(!"plot_max" %in% names(marker_values[[m]])) marker_values[[m]]["plot_max"] <- NA
   }
 
 
@@ -87,6 +89,14 @@ estimate_gate <- function(ff,
         ggplot2::geom_hline(yintercept = marker_values[[m2]]["max"], color = c("red")) +
         ggplot2::theme_minimal() +
         ggplot2::ggtitle(plot_title)
+      if(!is.na(marker_values[[m1]]["plot_min"]) |
+         !is.na(marker_values[[m1]]["plot_max"]))
+        p[[length(p)]] <- p[[length(p)]] + ggplot2::xlim(marker_values[[m1]]["plot_min"],
+                                                         marker_values[[m1]]["plot_max"])
+      if(!is.na(marker_values[[m2]]["plot_min"]) |
+         !is.na(marker_values[[m2]]["plot_max"]))
+        p[[length(p)]] <- p[[length(p)]] + ggplot2::ylim(marker_values[[m2]]["plot_min"],
+                                                         marker_values[[m2]]["plot_max"])
     }
     return(list(
       selection = selection,
