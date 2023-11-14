@@ -50,7 +50,14 @@ prep_FCS <- function(file,
         invert = TRUE, value = TRUE
       )
     }
-    ff_m <- PeacoQC::RemoveMargins(ff, removeMargins)
+
+    if (is.list(removeMargins)){
+      ff_m <- PeacoQC::RemoveMargins(ff,
+                                     names(removeMargins),
+                                     removeMargins)
+    } else {
+      ff_m <- PeacoQC::RemoveMargins(ff, removeMargins)
+    }
     to_plot[[length(to_plot) + 1]] <- list(
       ff_pre = ff,
       ff_post = ff_m,

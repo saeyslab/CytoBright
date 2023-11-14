@@ -1,7 +1,7 @@
 Package: CytoBright
 Type: Package
 Title: Cytometry Brightness Evaluation
-Version: 0.1.1
+Version: 0.1.2
 Author: Sofie Van Gassen
 Maintainer: Sofie Van Gassen <sofie.vangassen@ugent.be>
 Description: CytoBright can evaluate single-stain samples to estimate
