@@ -67,9 +67,13 @@ prep_FCS <- function(file,
   } else {
     ff_m <- ff
   }
-
-  if (isTRUE(removeDoublets)) {
-    ff_s <- PeacoQC::RemoveDoublets(ff_m)
+  if (!isFALSE(removeDoublets)) {
+    if (isTRUE(removeDoublets)) {
+      nmad <- 4
+    } else {
+      nmad <- removeDoublets
+    }
+    ff_s <- PeacoQC::RemoveDoublets(ff_m, nmad = nmad)
     to_plot[[length(to_plot) + 1]] <- list(
       ff_pre = ff_m,
       ff_post = ff_s,
