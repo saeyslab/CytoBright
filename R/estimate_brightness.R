@@ -173,7 +173,8 @@ estimate_brightness <- function(single_stains,
         # Thanks to Juan Hernandez
         voltage_keyword <- paste0("$P", which(colnames(ff) == detector), "V")
         orig_file <- flowCore::read.FCS(single_stains[row_ids[subset], "File"],
-                                        which.lines = 1)
+                                        which.lines = 1,
+                                        truncate_max_range = FALSE)
         flowCore::keyword(ff_tmp)[[voltage_keyword]] <-
           flowCore::keyword(orig_file)[[voltage_keyword]]
       }
