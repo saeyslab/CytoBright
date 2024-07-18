@@ -57,7 +57,8 @@ estimate_brightness <- function(single_stains,
                                 seed = 1,
                                 comp = NULL,
                                 transform = TRUE,
-                                unstained = NULL) {
+                                unstained = NULL,
+                                estimate_spillover = FALSE) {
   rownames(single_stains) <- single_stains$ID
   if (is.null(single_stains$Group)) single_stains$Group <- single_stains$ID
   groups <- unique(single_stains$Group)
@@ -71,11 +72,14 @@ estimate_brightness <- function(single_stains,
     "SI", "Voltage"
   )
 
-  values_for_comp <- c()
-  # values_for_comp <- c(paste0("MFI_pos_", detectors),
-  #                      paste0("MFI_neg_", detectors),
-  #                      paste0("Comp_", detectors),
-  #                      paste0("Spread_", detectors))
+  if(estimate_spillover){
+    values_for_comp <- c(paste0("MFI_pos_", detectors),
+                         paste0("MFI_neg_", detectors),
+                         paste0("Comp_", detectors),
+                         paste0("Spread_", detectors))
+  } else {
+    values_for_comp <- c()
+  }
 
   SI <- data.frame(
     matrix(
@@ -201,26 +205,27 @@ estimate_brightness <- function(single_stains,
       SI[sub_id, colnames(SI_tmp)] <- SI_tmp
 
 
-      # spillover_tmp <- estimate_spillover(ff = ff_tmp,
-      #                                     detector = detector,
-      #                                     other_detectors = detectors,
-      #                                     SI = SI_tmp)
-      # SI[sub_id, colnames(spillover_tmp)] <-  spillover_tmp
-      #
-      # if(is.null(comp)) { # Make empty identity matrix with only this detector filled out
-      #   # comp_tmp <- diag(length(detectors))
-      #   # colnames(comp_tmp) <- rownames(comp_tmp) <- detectors
-      #   # comp_tmp[detector, ] <- unlist(spillover_tmp[,grep("Comp", colnames(spillover_tmp))])
-      # } else {
-      #   comp_tmp <- comp
-      #
-      #   spread_tmp <- estimate_spread(ff = ff_tmp,
-      #                                 detector = detector,
-      #                                 SI = SI_tmp,
-      #                                 comp = comp_tmp)
-      #   SI[sub_id, colnames(spread_tmp)] <-  spread_tmp
-      # }
+      if(estimate_spillover){
+        spillover_tmp <- estimate_spillover(ff = ff_tmp,
+                                            detector = detector,
+                                            other_detectors = detectors,
+                                            SI = SI_tmp)
+        SI[sub_id, colnames(spillover_tmp)] <-  spillover_tmp
 
+        if(is.null(comp)) { # Make empty identity matrix with only this detector filled out
+          comp_tmp <- diag(length(detectors))
+          colnames(comp_tmp) <- rownames(comp_tmp) <- detectors
+          comp_tmp[detector, ] <- unlist(spillover_tmp[,grep("Comp", colnames(spillover_tmp))])
+        } else {
+          comp_tmp <- comp
+
+          spread_tmp <- estimate_spread(ff = ff_tmp,
+                                        detector = detector,
+                                        SI = SI_tmp,
+                                        comp = comp_tmp)
+          SI[sub_id, colnames(spread_tmp)] <-  spread_tmp
+        }
+      }
 
       if (return_cells) {
         set.seed(seed)
@@ -236,19 +241,71 @@ estimate_brightness <- function(single_stains,
   }
   close(pb)
 
-  best_per_group <- tapply(
-    SI$SI[SI$Pctg_OutOfRange < 0.01],
-    SI$Group[SI$Pctg_OutOfRange < 0.01],
-    find_plateau
-  )
-  best_per_group <- sapply(unique(SI$Group), function(x) {
-    SI$ID[which(SI$Group == x)][best_per_group[x]]
-  })
+  SI <- indicate_optimal_voltages(SI)
 
   return(list(
     SI = SI,
     cells = cells,
-    pregating_plots = pregating_plots,
-    best_per_group = best_per_group
+    pregating_plots = pregating_plots
   ))
+}
+
+#' Estimate spillover for one detector
+#' @param ff        FlowFrame. Assumed to be pregated.
+#' @param detector  Detector to evaluate. Should be a column name of ff.
+#' @param other_detectors Detectors to computer spillover into.
+#' @param SI        Dataframe of 1 row with relevant meta information,
+#'                  as returned by estimate_SI. Should at least contain
+#'                  "Cutoff" column.
+#' @export
+estimate_spillover <- function(ff,
+                               detector,
+                               other_detectors,
+                               SI){
+
+  pos <- flowCore::exprs(ff)[, detector] >= SI[["Cutoff"]]
+  neg <- flowCore::exprs(ff)[, detector] < SI[["Cutoff"]]
+
+  for(detector2 in other_detectors){
+    # Estimate compensation
+    SI[paste0("MFI_pos_", detector2)] <-
+      mfi_pos_d2 <- quantile(ff@exprs[pos, detector2], 0.50)
+    SI[paste0("MFI_neg_", detector2)] <-
+      mfi_neg_d2 <- quantile(ff@exprs[neg, detector2], 0.50)
+    SI[paste0("Comp_", detector2)] <- (mfi_pos_d2 - mfi_neg_d2) /
+      (SI["MFI_pos"] -  SI["MFI_neg"])
+  }
+
+  return(SI)
+}
+
+estimate_spread <- function(ff,
+                            detector,
+                            SI,
+                            comp){
+
+  pos <- flowCore::exprs(ff)[, detector] >= SI[["Cutoff"]]
+  neg <- flowCore::exprs(ff)[, detector] < SI[["Cutoff"]]
+
+  ff_c <- flowCore::compensate(ff, comp)
+
+  detectors <- colnames(comp)
+  for(detector2 in detectors){
+    d2_q50_neg <- quantile(ff_c@exprs[neg, detector2], 0.50)
+    d2_q84_neg <- quantile(ff_c@exprs[neg, detector2], 0.84)
+    d2_q50_pos <- quantile(ff_c@exprs[pos, detector2], 0.50)
+    d2_q84_pos <- quantile(ff_c@exprs[pos, detector2], 0.84)
+    d2_sigma2_neg      <- (d2_q84_neg - d2_q50_neg)^2
+    d2_sigma2_pos  <- (d2_q84_pos - d2_q50_pos)^2
+
+    if(detector2 != detector & d2_sigma2_pos  > d2_sigma2_neg){
+      SI[paste0("Spread_", detector2)] <-
+        sqrt(d2_sigma2_pos - d2_sigma2_neg) /
+        sqrt(SI["MFI_pos"] -  SI["MFI_neg"])
+    } else {
+      SI[paste0("Spread_", detector2)] <- 0
+    }
+  }
+
+  return(SI)
 }

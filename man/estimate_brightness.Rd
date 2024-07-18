@@ -14,7 +14,8 @@ estimate_brightness(
   seed = 1,
   comp = NULL,
   transform = TRUE,
-  unstained = NULL
+  unstained = NULL,
+  estimate_spillover = FALSE
 )
 }
 \arguments{

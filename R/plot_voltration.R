@@ -8,7 +8,7 @@
 #' @importFrom rlang .data
 #' @importFrom ggplot2 ggplot aes geom_point geom_segment geom_violin
 #'                     ggtitle theme theme_minimal xlab ylab layer_scales
-#'                     xlim geom_line scale_color_manual
+#'                     xlim ylim geom_line scale_color_manual
 #' @importFrom dplyr `%>%`
 #' @importFrom patchwork plot_layout
 #'
@@ -19,7 +19,10 @@ plot_voltrations <- function(SI,
                              cofactor = 150) {
   cells <- SI$cells
   max_signal <- SI$max_signal
-  if (is.null(optimal_voltage)) optimal_voltage <- SI$best_per_group
+  if (!is.null(optimal_voltage)){
+    SI$SI$Optimal <- rep(0, nrow(SI$SI))
+    SI$SI[optimal_voltage, "Optimal"] <- 1
+  } #optimal_voltage <- SI$best_per_group
   SI <- SI$SI
 
   plots_individual <- list()
@@ -99,15 +102,11 @@ plot_voltrations <- function(SI,
       aes(x = as.numeric(.data$Voltage), y = .data$SI)
     ) +
       geom_line() +
-      geom_point(aes(col = as.character(.data$ID %in% optimal_voltage +
-        2 * (.data$Pctg_OutOfRange > 0.01 |
-          .data$Voltage %in% dummy_voltages)))) +
+      geom_point(aes(col = as.character(.data$Optimal))) +
       theme_minimal() +
-      scale_color_manual(values = c(
-        "0" = "black",
-        "1" = "red",
-        "2" = "grey"
-      )) +
+      scale_color_manual(values = c("0" = "black",
+                                    "1" = "red"),
+                         na.value = "grey") +
       theme(legend.position = "none") +
       xlab("Voltage")
 
@@ -116,22 +115,18 @@ plot_voltrations <- function(SI,
       aes(x = as.numeric(.data$Voltage), y = .data$rSD)
     ) +
       geom_line() +
-      geom_point(aes(col = as.character(.data$ID %in% optimal_voltage +
-        2 * (.data$Pctg_OutOfRange > 0.01 |
-          .data$Voltage %in% dummy_voltages)))) +
+      geom_point(aes(col = as.character(.data$Optimal))) +
       theme_minimal() +
-      scale_color_manual(values = c(
-        "0" = "black",
-        "1" = "red",
-        "2" = "grey"
-      )) +
+      scale_color_manual(values = c("0" = "black",
+                                    "1" = "red"),
+                         na.value = "grey")  +
       theme(legend.position = "none") +
       xlab("Voltage")
 
     plots_individual[[group]] <-
       p_cells +
-      (p_SI + xlim(layer_scales(p_cells)$x$range$range)) +
-      (p_rSD + xlim(layer_scales(p_cells)$x$range$range)) +
+      (p_SI + xlim(layer_scales(p_cells)$x$range$range) + ylim(0,NA)) +
+      (p_rSD + xlim(layer_scales(p_cells)$x$range$range)+ ylim(0,NA)) +
       plot_layout(ncol = 1, heights = c(3, 1, 1))
   }
 

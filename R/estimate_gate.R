@@ -33,15 +33,15 @@ estimate_gate <- function(ff,
   selection <- rep(TRUE, nrow(ff))
   for (m in names(marker_values)) {
     cutoffs <- c(
+      tryCatch({flowDensity::deGate(ff,
+                                    m,
+                                    all.cuts = TRUE,
+                                    tinypeak.removal = tinypeak.removal)},
+               error = function(e){warning(e); return(NA)}),
       flowDensity::deGate(ff,
-        m,
-        all.cuts = TRUE,
-        tinypeak.removal = tinypeak.removal
-      ),
-      flowDensity::deGate(ff,
-        m,
-        use.upper = TRUE,
-        upper = TRUE
+                          m,
+                          use.upper = TRUE,
+                          upper = TRUE
       )
     )
     for (type in c("min", "max")) {
@@ -70,19 +70,21 @@ estimate_gate <- function(ff,
         m2 <- names(marker_values)[i + 1]
       } else {
         m1 <- colnames(ff)[1]
+        marker_values[[m1]] <- c()
+        marker_values[[m1]]["plot_min"] <- NA
+        marker_values[[m1]]["plot_max"] <- NA
         m2 <- names(marker_values)[i]
       }
 
-      if (!"Original_ID" %in% colnames(ff)) {
-        ff <- flowCore::fr_append_cols(
-          ff,
-          matrix(seq_len(nrow(ff)),
-            ncol = 1,
-            dimnames = list(NULL, "Original_ID")
-          )
+
+      ff <- flowCore::fr_append_cols(
+        ff,
+        matrix(seq_len(nrow(ff)),
+               ncol = 1,
+               dimnames = list(NULL, "Pregating_ID")
         )
-      }
-      p[[length(p) + 1]] <- filter_plot(ff, ff[selection, ], "", m1, m2) + # ggcyto::autoplot(ff, m1, m2, bins = 128) +
+      )
+      p[[length(p) + 1]] <- filter_plot(ff, ff[selection, ], "", m1, m2, id_column = "Pregating_ID") +
         ggplot2::geom_vline(xintercept = marker_values[[m1]]["min"], color = c("cyan")) +
         ggplot2::geom_vline(xintercept = marker_values[[m1]]["max"], color = c("red")) +
         ggplot2::geom_hline(yintercept = marker_values[[m2]]["min"], color = c("cyan")) +
