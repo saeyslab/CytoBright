@@ -35,12 +35,17 @@ filter_plot <- function(ff_pre,
   )
 
   i <- sample(nrow(df), min(n, nrow(df)))
-  p <- ggplot2::ggplot(df[i, ],
-                       ggplot2::aes(x = .data$x,
-                                    y = .data$y,
-                                    color = .data$selected)) +
-    ggplot2::geom_point(size = 0.5) +
-    ggplot2::scale_color_manual(values = c("TRUE" = "blue", "FALSE" = "red")) +
+  p <- ggplot2::ggplot(mapping = ggplot2::aes(x = .data$x,
+                                              y = .data$y)) +
+    ggpointdensity::geom_pointdensity(size = 0.5,
+                                      data = df[i[df[i, "selected"]], ],
+                                      adjust = 500) +
+    ggplot2::scale_color_gradient(low = "#9ecae1", high = "#3182bd", guide = "none") +
+    ggnewscale::new_scale_color() +
+    ggpointdensity::geom_pointdensity(size = 0.5,
+                                      data = df[i[!df[i, "selected"]], ],
+                                      adjust = 500) +
+    ggplot2::scale_color_gradient(low = "#fc9272", high = "#de2d26", guide = "none") +
     ggplot2::xlab(paste(flowCore::getChannelMarker(ff_pre, channel_x), collapse = " ")) +
     ggplot2::ylab(paste(flowCore::getChannelMarker(ff_pre, channel_y), collapse = " ")) +
     ggplot2::theme_minimal() +

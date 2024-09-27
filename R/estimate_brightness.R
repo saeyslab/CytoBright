@@ -58,7 +58,9 @@ estimate_brightness <- function(single_stains,
                                 comp = NULL,
                                 transform = TRUE,
                                 unstained = NULL,
-                                estimate_spillover = FALSE) {
+                                estimate_spillover = FALSE,
+                                estimate_spread = FALSE,
+                                silent = TRUE) {
   rownames(single_stains) <- single_stains$ID
   if (is.null(single_stains$Group)) single_stains$Group <- single_stains$ID
   groups <- unique(single_stains$Group)
@@ -72,13 +74,21 @@ estimate_brightness <- function(single_stains,
     "SI", "Voltage"
   )
 
-  if(estimate_spillover){
+  if(estimate_spillover | estimate_spread){
     values_for_comp <- c(paste0("MFI_pos_", detectors),
                          paste0("MFI_neg_", detectors),
-                         paste0("Comp_", detectors),
-                         paste0("Spread_", detectors))
+                         paste0("Comp_", detectors))
   } else {
     values_for_comp <- c()
+  }
+
+  if(estimate_spread){
+    values_for_spread <- c(paste0("MFI_pos_c_", detectors),
+                           paste0("MFI_neg_c_", detectors),
+                           paste0("Spread_", detectors),
+                           paste0("SSI_", detectors))
+  } else {
+    values_for_spread <- c()
   }
 
   SI <- data.frame(
@@ -86,13 +96,15 @@ estimate_brightness <- function(single_stains,
       nrow = 0,
       ncol = ncol(single_stains) +
         length(values_of_interest) +
-        length(values_for_comp),
+        length(values_for_comp) +
+        length(values_for_spread),
       dimnames = list(
         NULL,
         c(
           colnames(single_stains),
           values_of_interest,
-          values_for_comp
+          values_for_comp,
+          values_for_spread
         )
       )
     ),
@@ -131,7 +143,7 @@ estimate_brightness <- function(single_stains,
       ff <- FlowSOM::AggregateFlowFrames(files,
         cTotal = 3000000,
         truncate_max_range = FALSE,
-        silent = TRUE
+        silent = silent
       )
     } else {
       file <- single_stains[row_ids, "File"]
@@ -211,20 +223,22 @@ estimate_brightness <- function(single_stains,
                                             other_detectors = detectors,
                                             SI = SI_tmp)
         SI[sub_id, colnames(spillover_tmp)] <-  spillover_tmp
+      }
 
+      if(estimate_spread){
         if(is.null(comp)) { # Make empty identity matrix with only this detector filled out
           comp_tmp <- diag(length(detectors))
           colnames(comp_tmp) <- rownames(comp_tmp) <- detectors
-          comp_tmp[detector, ] <- unlist(spillover_tmp[,grep("Comp", colnames(spillover_tmp))])
+          comp_tmp[detector, ] <- unlist(spillover_tmp[, grep("Comp", colnames(spillover_tmp))])
         } else {
           comp_tmp <- comp
-
-          spread_tmp <- estimate_spread(ff = ff_tmp,
-                                        detector = detector,
-                                        SI = SI_tmp,
-                                        comp = comp_tmp)
-          SI[sub_id, colnames(spread_tmp)] <-  spread_tmp
         }
+
+        spread_tmp <- estimate_spread(ff = ff_tmp,
+                                      detector = detector,
+                                      SI = SI_tmp,
+                                      comp = comp_tmp)
+        SI[sub_id, colnames(spread_tmp)] <-  spread_tmp
       }
 
       if (return_cells) {
@@ -291,10 +305,13 @@ estimate_spread <- function(ff,
 
   detectors <- colnames(comp)
   for(detector2 in detectors){
+    d2_q05_neg <- quantile(ff_c@exprs[neg, detector2], 0.05)
     d2_q50_neg <- quantile(ff_c@exprs[neg, detector2], 0.50)
     d2_q84_neg <- quantile(ff_c@exprs[neg, detector2], 0.84)
+    d2_q95_neg <- quantile(ff_c@exprs[neg, detector2], 0.95)
     d2_q50_pos <- quantile(ff_c@exprs[pos, detector2], 0.50)
     d2_q84_pos <- quantile(ff_c@exprs[pos, detector2], 0.84)
+    d2_rsd_neg <- (d2_q95_neg - d2_q05_neg) / 3.29
     d2_sigma2_neg      <- (d2_q84_neg - d2_q50_neg)^2
     d2_sigma2_pos  <- (d2_q84_pos - d2_q50_pos)^2
 
@@ -304,6 +321,14 @@ estimate_spread <- function(ff,
         sqrt(SI["MFI_pos"] -  SI["MFI_neg"])
     } else {
       SI[paste0("Spread_", detector2)] <- 0
+    }
+
+    SI[paste0("MFI_pos_c_", detector2)] <- d2_q50_pos
+    SI[paste0("MFI_neg_c_", detector2)] <- d2_q50_neg
+    if(detector != detector2){
+      SI[paste0("SSI_", detector2)] <- (d2_q50_pos - d2_q50_neg) / (2 * d2_rsd_neg)
+    } else {
+      SI[paste0("SSI_", detector2)] <- 0
     }
   }
 
