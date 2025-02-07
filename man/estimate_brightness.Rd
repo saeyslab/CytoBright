@@ -2,19 +2,16 @@
 % Please edit documentation in R/estimate_brightness.R
 \name{estimate_brightness}
 \alias{estimate_brightness}
-\title{Estimate SI from single stains}
+\title{Estimate SI brightness from single stains}
 \usage{
 estimate_brightness(
   single_stains,
-  preprocessing_parameters = list(compensate = FALSE, removeMargins = TRUE,
-    removeDoublets = TRUE, pregate = list(list(marker_values = list(`FSC-A` = c(min =
-    60000, range_min = 50000, max = 125000, range_max = 50000), `SSC-A` = c(max = 80000,
-    range_max = 50000)))), pregate_tf = FALSE),
   return_cells = TRUE,
   seed = 1,
   comp = NULL,
   transform = TRUE,
   unstained = NULL,
+  remove_neg_from_single = FALSE,
   estimate_spillover = FALSE,
   estimate_spread = FALSE,
   silent = TRUE
@@ -26,21 +23,19 @@ ID, Fluorochrome, Detector, File.
 ID is assumed to be unique.
 Detector should correspond with the colnames of the
 flow frames.
-File should be full path to the single stain fcs files.}
+File should be full path to the single stain fcs files,
+which have been preprocessed (e.g. clean up gates been
+applied).}
 
-\item{preprocessing_parameters}{Parameters for pregating done by flowDensity.
-Named list with booleans (compensate, removeMargins,
-removeDoublets) and "pregate", which is a list itself,
-and contains per gate a list marker_values.
-The name corresponding to the channel.}
-
-\item{return_cells}{Boolean. If true, a list with cell values are returned}
+\item{return_cells}{Boolean. If true, a list with subsampled cell values
+are returned, e.g. for plotting.}
 
 \item{seed}{Seed for reproducability}
 
 \item{comp}{Compensation matrix.}
 
-\item{transform}{Can either be a logical value or a transformList.
+\item{transform}{Transform parameter to be passed to find_cutoff_flowDensity.
+Can either be a logical value or a transformList.
 If FALSE, no transform is applied. If TRUE (default),
 flowcore::estimateLogicle is called, and if this fails, the
 default logicleTransform() is applied. If a transformList,
@@ -48,9 +43,10 @@ this transformList is applied. Note that the value is
 returned in the original space.}
 
 \item{unstained}{If this parameter is provided, it should contain a path
-to an fcs file. The unstained population will then be
-taken from this file rather than the single stain.}
+to a preprocessed unstained fcs file. The positivity
+threshold will be defined on this sample, and the cells
+will be concatened to the single stain for the calculations.}
 }
 \description{
-Estimate SI from single stains
+Estimate SI brightness from single stains
 }

@@ -79,8 +79,8 @@ plot_voltrations <- function(SI,
         aes(
           x = as.numeric(.data$Voltage) - 20,
           xend = as.numeric(.data$Voltage) + 20,
-          y = asinh(.data$Max_neg / cofactor),
-          yend = asinh(.data$Max_neg / cofactor)
+          y = asinh(.data$q95_neg / cofactor),
+          yend = asinh(.data$q95_neg / cofactor)
         ),
         col = "cyan",
         data = SI[ids, ]
@@ -89,8 +89,8 @@ plot_voltrations <- function(SI,
         aes(
           x = as.numeric(.data$Voltage) - 20,
           xend = as.numeric(.data$Voltage) + 20,
-          y = asinh(.data$Min_neg / cofactor),
-          yend = asinh(.data$Min_neg / cofactor)
+          y = asinh(.data$q05_neg / cofactor),
+          yend = asinh(.data$q05_neg / cofactor)
         ),
         col = "cyan",
         data = SI[ids, ]

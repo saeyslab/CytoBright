@@ -11,13 +11,16 @@ prep_FCS(
   removeDoublets = TRUE,
   pregate = TRUE,
   pregate_tf = TRUE,
+  seed = 1,
   ...
 )
 }
 \arguments{
 \item{file}{Path to fcs file or flowFrame.
-Will be read with truncate_max_range = FALSE. Additional parameters
-for read.FCS will be passed along.}
+Will be read with truncate_max_range = FALSE. Additional
+parameters for read.FCS will be passed along.
+If a vector of multiple paths is passed, an aggregate with up to
+3 000 000 cells is created, and split again at the end}
 
 \item{compensate}{Can be FALSE (no compensation), a character (keyword in
 the flowFrame containing the compensation matrix) or a
@@ -37,6 +40,11 @@ Default = TRUE}
 \item{pregate_tf}{TransformList to use in pregating.}
 
 \item{...}{Extra arguments to pass to read.FCS}
+}
+\value{
+list with the 3 elements: (1) flowframe: preprocessed flowframe (or
+         a list of flowframes if multiple paths were given as input), (2)
+         plot: a list of plots, (3) tf: the transformList used.
 }
 \description{
 Preprocess FCS file

@@ -1,29 +1,28 @@
-#' Estimate SI from single stains
+#' Estimate SI brightness from single stains
 #'
 #' @param single_stains Dataframe with at least the following columns:
 #'                      ID, Fluorochrome, Detector, File.
 #'                      ID is assumed to be unique.
 #'                      Detector should correspond with the colnames of the
 #'                      flow frames.
-#'                      File should be full path to the single stain fcs files.
-#' @param preprocessing_parameters Parameters for pregating done by flowDensity.
-#'                      Named list with booleans (compensate, removeMargins,
-#'                      removeDoublets) and "pregate", which is a list itself,
-#'                      and contains per gate a list marker_values.
-#'                      The name corresponding to the channel.
-#'
-#' @param return_cells  Boolean. If true, a list with cell values are returned
+#'                      File should be full path to the single stain fcs files,
+#'                      which have been preprocessed (e.g. clean up gates been
+#'                      applied).
+#' @param return_cells  Boolean. If true, a list with subsampled cell values
+#'                      are returned, e.g. for plotting.
 #' @param seed          Seed for reproducability
 #' @param comp          Compensation matrix.
-#' @param transform Can either be a logical value or a transformList.
+#' @param transform Transform parameter to be passed to find_cutoff_flowDensity.
+#'                  Can either be a logical value or a transformList.
 #'                  If FALSE, no transform is applied. If TRUE (default),
 #'                  flowcore::estimateLogicle is called, and if this fails, the
 #'                  default logicleTransform() is applied. If a transformList,
 #'                  this transformList is applied. Note that the value is
 #'                  returned in the original space.
 #' @param unstained     If this parameter is provided, it should contain a path
-#'                      to an fcs file. The unstained population will then be
-#'                      taken from this file rather than the single stain.
+#'                      to a preprocessed unstained fcs file. The positivity
+#'                      threshold will be defined on this sample, and the cells
+#'                      will be concatened to the single stain for the calculations.
 #'
 #' @importFrom flowCore read.FCS transform transformList arcsinhTransform colnames compensate
 #' @importFrom flowDensity deGate
@@ -32,47 +31,31 @@
 #'
 #' @export
 estimate_brightness <- function(single_stains,
-                                preprocessing_parameters =
-                                  list(
-                                    compensate = FALSE,
-                                    removeMargins = TRUE,
-                                    removeDoublets = TRUE,
-                                    pregate = list(list(
-                                      marker_values = list(
-                                        "FSC-A" = c(
-                                          min = 60000,
-                                          range_min = 50000,
-                                          max = 125000,
-                                          range_max = 50000
-                                        ),
-                                        "SSC-A" = c(
-                                          max = 80000,
-                                          range_max = 50000
-                                        )
-                                      )
-                                    )),
-                                    pregate_tf = FALSE
-                                  ),
                                 return_cells = TRUE,
                                 seed = 1,
                                 comp = NULL,
                                 transform = TRUE,
                                 unstained = NULL,
+                                remove_neg_from_single = FALSE,
                                 estimate_spillover = FALSE,
                                 estimate_spread = FALSE,
                                 silent = TRUE) {
   rownames(single_stains) <- single_stains$ID
-  if (is.null(single_stains$Group)) single_stains$Group <- single_stains$ID
-  groups <- unique(single_stains$Group)
   detectors <- unique(single_stains$Detector)
 
-  pb <- utils::txtProgressBar(min = 0, max = length(groups), style = 3)
+
+  pb <- utils::txtProgressBar(min = 0, max = nrow(single_stains), style = 3)
 
   values_of_interest <- c(
     "Cutoff", "MFI_pos", "MFI_neg",
-    "Min_neg", "Max_neg", "rSD",
+    "q05_neg", "q95_neg", "rSD",
     "SI", "Voltage"
   )
+
+  if (!is.null(unstained)) {
+    ff_unstained <- flowCore::read.FCS(unstained,
+                                       truncate_max_range = FALSE)
+  }
 
   if(estimate_spillover | estimate_spread){
     values_for_comp <- c(paste0("MFI_pos_", detectors),
@@ -111,186 +94,175 @@ estimate_brightness <- function(single_stains,
     check.names = FALSE
   )
 
-  pregating_plots <- list()
-
   cells <- data.frame(matrix(NA,
     nrow = 0,
     ncol = 2,
     dimnames = list(NULL, c("ID", "Value"))
   ))
 
-  if (!is.null(unstained)) {
-    ff_unstained <- do.call(
-      prep_FCS,
-      c(
-        list(file = unstained),
-        preprocessing_parameters
-      )
-    )
-  }
+  for(i in seq_len(nrow(single_stains))) {
 
-  for (group in groups) {
-    utils::setTxtProgressBar(pb, which(groups == group))
+    utils::setTxtProgressBar(pb, i)
 
-    row_ids <- which(single_stains$Group == group)
+    id <- single_stains$ID[i]
+    file <- single_stains$File[i]
+    fluor <- single_stains[i, "Fluorochrome"]
+    detector <- single_stains[i, "Detector"]
 
-    fluor <- single_stains[row_ids[1], "Fluorochrome"]
-    detector <- single_stains[row_ids[1], "Detector"]
+    ff <- flowCore::read.FCS(file, truncate_max_range = FALSE)
 
-    if (length(row_ids) > 1) {
-      files <- single_stains[row_ids, "File"]
-      set.seed(seed)
-      ff <- FlowSOM::AggregateFlowFrames(files,
-        cTotal = 3000000,
-        truncate_max_range = FALSE,
-        silent = silent
-      )
-    } else {
-      file <- single_stains[row_ids, "File"]
-      ff <- flowCore::read.FCS(file, truncate_max_range = FALSE)
-    }
+    SI[id, colnames(single_stains)] <- single_stains[id, ]
 
 
-    ff_prep <- do.call(
-      prep_FCS,
-      c(
-        list(file = ff),
-        preprocessing_parameters
-      )
-    )
-    ff <- ff_prep$flowFrame
-    pregating_plots[[group]] <- ff_prep$plot
+    if (!is.null(unstained)) {
+      cutoff <- find_cutoff_FMO(ff_unstained, detector, 0.995)
 
-    if ("File" %in% colnames(ff)) {
-      subsets <- ff@exprs[, "File"]
-    } else {
-      subsets <- rep(1, nrow(ff))
-    }
+      if(remove_neg_from_single){
+        cutoff_tmp <- find_cutoff_flowDensity(ff,
+                                              detector = detector,
+                                              transform = transform)
+        flowCore::exprs(ff) <- rbind(
+          flowCore::exprs(ff)[exprs(ff)[,detector] > cutoff_tmp, ],
+          flowCore::exprs(ff_unstained)) # To be further optimized
 
-    for (subset in unique(subsets)) {
-      selection <- subsets == subset
-      if (length(unique(subsets)) > 1) {
-        if (length(row_ids) == length(unique(subsets))) {
-          sub_id <- single_stains[row_ids[subset], "ID"]
-          SI[sub_id, colnames(single_stains)] <- single_stains[sub_id, ]
-        } else {
-          sub_id <- paste0(group, "_", subset)
-          SI[sub_id, colnames(single_stains)] <- single_stains[group, ]
-          SI[sub_id, "ID"] <- sub_id
-        }
       } else {
-        sub_id <- group
-        SI[sub_id, colnames(single_stains)] <- single_stains[sub_id, ]
+        flowCore::exprs(ff) <- rbind(
+          flowCore::exprs(ff),
+          flowCore::exprs(ff_unstained)) # To be further optimized
       }
 
-      ff_tmp <- ff[selection, ]
-      if(length(row_ids) > 1){
-        # restore voltage which was lost in concatenation
-        # Thanks to Juan Hernandez
-        voltage_keyword <- paste0("$P", which(colnames(ff) == detector), "V")
-        orig_file <- flowCore::read.FCS(single_stains[row_ids[subset], "File"],
-                                        which.lines = 1,
-                                        truncate_max_range = FALSE)
-        flowCore::keyword(ff_tmp)[[voltage_keyword]] <-
-          flowCore::keyword(orig_file)[[voltage_keyword]]
-      }
+    } else {
+      cutoff <- find_cutoff_flowDensity(ff,
+                                        detector = detector,
+                                        transform = transform)
+    }
 
-      if (!is.null(unstained)) {
-        cutoff <- find_cutoff_FMO(ff_unstained$flowFrame, detector, 0.995)
+    SI_tmp <- estimate_SI(
+      ff = ff,
+      detector = detector,
+      cutoff = cutoff
+    )
 
-        flowCore::exprs(ff_tmp) <- rbind(
-          flowCore::exprs(ff_tmp),
-          flowCore::exprs(ff_unstained$flowFrame)
-        )
-      } else {
-        cutoff <- find_cutoff_flowDensity(ff_tmp,
+    SI[id, colnames(SI_tmp)] <- SI_tmp
+
+
+    if(estimate_spillover){
+      spillover_tmp <- estimate_spillover(ff = ff,
                                           detector = detector,
-                                          transform = transform)
+                                          other_detectors = detectors,
+                                          meta = SI_tmp)
+      SI[id, colnames(spillover_tmp)] <-  spillover_tmp
+    }
+
+    if(estimate_spread){
+      if(is.null(comp)) { # Make empty identity matrix with only this detector filled out
+        comp_tmp <- diag(length(detectors))
+        colnames(comp_tmp) <- rownames(comp_tmp) <- detectors
+        comp_tmp[detector, ] <- unlist(spillover_tmp[, grep("Comp", colnames(spillover_tmp))])
+      } else {
+        comp_tmp <- comp
       }
 
-      SI_tmp <- estimate_SI(
-        ff = ff_tmp,
-        detector = detector,
-        cutoff = cutoff
-      )
+      spread_tmp <- estimate_spread(ff = ff,
+                                    detector = detector,
+                                    SI = SI_tmp,
+                                    comp = comp_tmp)
+      SI[id, colnames(spread_tmp)] <-  spread_tmp
+    }
 
-      SI[sub_id, colnames(SI_tmp)] <- SI_tmp
-
-
-      if(estimate_spillover){
-        spillover_tmp <- estimate_spillover(ff = ff_tmp,
-                                            detector = detector,
-                                            other_detectors = detectors,
-                                            SI = SI_tmp)
-        SI[sub_id, colnames(spillover_tmp)] <-  spillover_tmp
-      }
-
-      if(estimate_spread){
-        if(is.null(comp)) { # Make empty identity matrix with only this detector filled out
-          comp_tmp <- diag(length(detectors))
-          colnames(comp_tmp) <- rownames(comp_tmp) <- detectors
-          comp_tmp[detector, ] <- unlist(spillover_tmp[, grep("Comp", colnames(spillover_tmp))])
-        } else {
-          comp_tmp <- comp
-        }
-
-        spread_tmp <- estimate_spread(ff = ff_tmp,
-                                      detector = detector,
-                                      SI = SI_tmp,
-                                      comp = comp_tmp)
-        SI[sub_id, colnames(spread_tmp)] <-  spread_tmp
-      }
-
-      if (return_cells) {
-        set.seed(seed)
-        cells <- rbind(
-          cells,
-          sample_cells(ff_tmp,
-            detector,
-            meta = data.frame(ID = sub_id)
-          )
+    if (return_cells) {
+      set.seed(seed)
+      cells <- rbind(
+        cells,
+        sample_cells(ff,
+                     detector,
+                     meta = data.frame(ID = id)
         )
-      }
+      )
     }
   }
+
   close(pb)
 
   SI <- indicate_optimal_voltages(SI)
 
   return(list(
     SI = SI,
-    cells = cells,
-    pregating_plots = pregating_plots
+    cells = cells
   ))
+}
+
+#' Estimate Stain Index for one detector
+#'
+#' @param ff        FlowFrame. Assumed to be compensated and pregated.
+#' @param detector  Detector to evaluate. Should be a column name of ff.
+#' @param cutoff    Threshold between positive and negative population.
+#' @param meta      Dataframe of 1 row with relevant meta information.
+#'                  The results will be appended to this.
+#'
+#' @importFrom flowCore exprs keyword parameters nrow
+#' @importFrom stats quantile
+#' @importFrom Biobase pData
+#' @export
+estimate_SI <- function(ff,
+                        detector,
+                        cutoff,
+                        meta = data.frame(matrix(NA, nrow = 1, ncol = 0))) {
+  detector <- unname(detector)
+
+  pos <- flowCore::exprs(ff)[, detector] >= cutoff
+  neg <- flowCore::exprs(ff)[, detector] < cutoff
+
+  meta["Detector"] <- detector
+  meta["Voltage"] <- as.numeric(
+    flowCore::keyword(ff, paste0("$P", which(colnames(ff) == detector), "V"))
+  )
+  meta["Cutoff"] <- cutoff
+  meta["Pos_count"] <- sum(pos)
+  meta["Neg_count"] <- sum(neg)
+  meta["MFI_pos"] <- stats::quantile(flowCore::exprs(ff)[pos, detector], 0.50)
+  meta["MFI_neg"] <- stats::quantile(flowCore::exprs(ff)[neg, detector], 0.50)
+  meta["q95_neg"] <- stats::quantile(flowCore::exprs(ff)[neg, detector], 0.95)
+  meta["q05_neg"] <- stats::quantile(flowCore::exprs(ff)[neg, detector], 0.05)
+  meta["rSD"] <- (meta["q95_neg"] - meta["q05_neg"]) / 3.29
+  meta["SI"] <- (meta["MFI_pos"] - meta["MFI_neg"]) / (2 * meta["rSD"])
+
+  pData <- Biobase::pData(flowCore::parameters(ff))
+  limit <- pData[pData$name == detector, "maxRange"]
+  meta["Pctg_OutOfRange"] <- sum(flowCore::exprs(ff)[, detector] >= limit) /
+    flowCore::nrow(ff)
+
+  return(meta)
 }
 
 #' Estimate spillover for one detector
 #' @param ff        FlowFrame. Assumed to be pregated.
 #' @param detector  Detector to evaluate. Should be a column name of ff.
 #' @param other_detectors Detectors to computer spillover into.
-#' @param SI        Dataframe of 1 row with relevant meta information,
+#' @param meta      Dataframe of 1 row with relevant meta information,
 #'                  as returned by estimate_SI. Should at least contain
 #'                  "Cutoff" column.
 #' @export
 estimate_spillover <- function(ff,
                                detector,
                                other_detectors,
-                               SI){
+                               meta){
 
-  pos <- flowCore::exprs(ff)[, detector] >= SI[["Cutoff"]]
-  neg <- flowCore::exprs(ff)[, detector] < SI[["Cutoff"]]
+  pos <- flowCore::exprs(ff)[, detector] >= meta[1, "Cutoff"]
+  neg <- flowCore::exprs(ff)[, detector] < meta[1, "Cutoff"]
 
   for(detector2 in other_detectors){
+
     # Estimate compensation
-    SI[paste0("MFI_pos_", detector2)] <-
+    meta[paste0("MFI_pos_", detector2)] <-
       mfi_pos_d2 <- quantile(ff@exprs[pos, detector2], 0.50)
-    SI[paste0("MFI_neg_", detector2)] <-
+    meta[paste0("MFI_neg_", detector2)] <-
       mfi_neg_d2 <- quantile(ff@exprs[neg, detector2], 0.50)
-    SI[paste0("Comp_", detector2)] <- (mfi_pos_d2 - mfi_neg_d2) /
-      (SI["MFI_pos"] -  SI["MFI_neg"])
+    meta[paste0("Comp_", detector2)] <- (mfi_pos_d2 - mfi_neg_d2) /
+      (meta["MFI_pos"] -  meta["MFI_neg"])
   }
 
-  return(SI)
+  return(meta)
 }
 
 estimate_spread <- function(ff,

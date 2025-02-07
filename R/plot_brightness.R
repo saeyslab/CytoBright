@@ -109,7 +109,7 @@ plot_brightness <- function(SI_optimal,
       ggplot2::geom_point(
         ggplot2::aes(
           y = .data$ID,
-          x = asinh(.data$Max_neg / cofactor)
+          x = asinh(.data$q95_neg / cofactor)
         ),
         data = SI_optimal,
         col = "cyan", size = 1
@@ -117,7 +117,7 @@ plot_brightness <- function(SI_optimal,
       ggplot2::geom_point(
         ggplot2::aes(
           y = .data$ID,
-          x = asinh(.data$Min_neg / cofactor)
+          x = asinh(.data$q05_neg / cofactor)
         ),
         data = SI_optimal,
         col = "cyan", size = 1

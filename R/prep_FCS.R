@@ -1,8 +1,10 @@
 #' Preprocess FCS file
 #'
 #' @param file Path to fcs file or flowFrame.
-#'             Will be read with truncate_max_range = FALSE. Additional parameters
-#'             for read.FCS will be passed along.
+#'             Will be read with truncate_max_range = FALSE. Additional
+#'             parameters for read.FCS will be passed along.
+#'             If a vector of multiple paths is passed, an aggregate with up to
+#'             3 000 000 cells is created, and split again at the end
 #' @param compensate  Can be FALSE (no compensation), a character (keyword in
 #'                    the flowFrame containing the compensation matrix) or a
 #'                    numeric matrix (compensation matrix to use).
@@ -15,8 +17,13 @@
 #' @param removeDoublets Boolean, whether or not to remove
 #' @param pregate Pregating information
 #' @param pregate_tf TransformList to use in pregating.
+#' @param output_dir If NULL (default) nothing is stored.
 #' @param ... Extra arguments to pass to read.FCS
 #'
+#'
+#' @returns list with the 3 elements: (1) flowframe: preprocessed flowframe (or
+#'          a list of flowframes if multiple paths were given as input), (2)
+#'          plot: a list of plots, (3) tf: the transformList used.
 #' @importFrom methods is
 #' @importFrom flowCore read.FCS keyword compensate getChannelMarker
 #'                      estimateLogicle transformList transform
@@ -29,12 +36,22 @@ prep_FCS <- function(file,
                      removeDoublets = TRUE,
                      pregate = TRUE,
                      pregate_tf = TRUE,
+                     seed = 1,
+                     output_dir = NULL,
                      ...) {
   if (is.character(file)) {
-    ff <- flowCore::read.FCS(file,
-      truncate_max_range = FALSE,
-      ...
-    )
+    if (length(file) > 1) {
+      set.seed(seed)
+      ff <- FlowSOM::AggregateFlowFrames(file,
+                                         cTotal = 3000000,
+                                         truncate_max_range = FALSE,
+                                         silent = TRUE)
+    }else {
+      ff <- flowCore::read.FCS(file,
+        truncate_max_range = FALSE,
+        ...
+      )
+    }
   } else if (methods::is(file, "flowFrame")) {
     ff <- file
   } else {
@@ -183,6 +200,39 @@ prep_FCS <- function(file,
     plot_list <- c(plot_list, lapply(gate_res, function(x) x$plot))
   } else {
     ff_gated <- ff_s
+  }
+
+
+  if(length(file) > 1){
+    ff_gated_tmp <- ff_gated
+    ff_gated <- list()
+    file_ids <- exprs(ff_gated_tmp)[,"File"]
+    for(i in unique(file_ids)){
+      ff_tmp <- ff_gated_tmp[file_ids == i, ]
+
+      orig_file <- flowCore::read.FCS(file[i],
+                                      which.lines = 1,
+                                      truncate_max_range = FALSE)
+      voltage_keywords <- grep("\\$P[0-9]*V",
+                               names(flowCore::keyword(orig_file)),
+                               value = TRUE)
+      flowCore::keyword(ff_tmp)[voltage_keywords] <-
+        flowCore::keyword(orig_file)[voltage_keywords]
+      ff_gated[[i]] <- ff_tmp
+    }
+  }
+
+  if(!is.null(output_dir)){
+    filename <- gsub("/", "_", file)
+    if(length(file) == 1){
+      flowCore::write.FCS(ff_gated, file.path(output_dir, filename))
+    } else {
+      for(i in seq_along(ff_gated)){
+        flowCore::write.FCS(ff_gated[[i]], file.path(output_dir, filename[1]))
+      }
+    }
+    saveRDS(plot_list, file.path(output_dir, gsub(".fcs", "_plotlist.RDS", basename(file)[1])))
+    saveRDS(pregate_tf, file.path(output_dir, gsub(".fcs", "_tf.RDS", filename[1])))
   }
 
   return(list(

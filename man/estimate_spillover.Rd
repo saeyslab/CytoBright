@@ -4,7 +4,7 @@
 \alias{estimate_spillover}
 \title{Estimate spillover for one detector}
 \usage{
-estimate_spillover(ff, detector, other_detectors, SI)
+estimate_spillover(ff, detector, other_detectors, meta)
 }
 \arguments{
 \item{ff}{FlowFrame. Assumed to be pregated.}
@@ -13,7 +13,7 @@ estimate_spillover(ff, detector, other_detectors, SI)
 
 \item{other_detectors}{Detectors to computer spillover into.}
 
-\item{SI}{Dataframe of 1 row with relevant meta information,
+\item{meta}{Dataframe of 1 row with relevant meta information,
 as returned by estimate_SI. Should at least contain
 "Cutoff" column.}
 }
