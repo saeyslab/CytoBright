@@ -54,7 +54,8 @@ estimate_brightness <- function(single_stains,
 
   if (!is.null(unstained)) {
     ff_unstained <- flowCore::read.FCS(unstained,
-                                       truncate_max_range = FALSE)
+                                       truncate_max_range = FALSE,
+                                       emptyValue = FALSE)
   }
 
   if(estimate_spillover | estimate_spread){
@@ -109,7 +110,9 @@ estimate_brightness <- function(single_stains,
     fluor <- single_stains[i, "Fluorochrome"]
     detector <- single_stains[i, "Detector"]
 
-    ff <- flowCore::read.FCS(file, truncate_max_range = FALSE)
+    ff <- flowCore::read.FCS(file,
+                             truncate_max_range = FALSE,
+                             emptyValue = FALSE)
 
     SI[id, colnames(single_stains)] <- single_stains[id, ]
 
@@ -265,6 +268,20 @@ estimate_spillover <- function(ff,
   return(meta)
 }
 
+#' Extract a compensation matrix
+#'
+#' @param SI Result of estimate_brightness with estimate_spillover = TRUE
+#' @param singles_of_interest Rownames of the singles you want to include
+#'
+#' @export
+extract_spillover <- function(SI, singles_of_interest){
+  detectors <- SI[singles_of_interest, "Detector"]
+  comp <- SI[singles_of_interest,
+             paste0("Comp_", detectors)]
+  colnames(comp) <- gsub("Comp_", "", colnames(comp))
+  return(comp)
+}
+
 estimate_spread <- function(ff,
                             detector,
                             SI,
@@ -284,8 +301,8 @@ estimate_spread <- function(ff,
     d2_q50_pos <- quantile(ff_c@exprs[pos, detector2], 0.50)
     d2_q84_pos <- quantile(ff_c@exprs[pos, detector2], 0.84)
     d2_rsd_neg <- (d2_q95_neg - d2_q05_neg) / 3.29
-    d2_sigma2_neg      <- (d2_q84_neg - d2_q50_neg)^2
-    d2_sigma2_pos  <- (d2_q84_pos - d2_q50_pos)^2
+    d2_sigma2_neg <- (d2_q84_neg - d2_q50_neg)^2
+    d2_sigma2_pos <- (d2_q84_pos - d2_q50_pos)^2
 
     if(detector2 != detector & d2_sigma2_pos  > d2_sigma2_neg){
       SI[paste0("Spread_", detector2)] <-

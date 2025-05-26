@@ -38,7 +38,7 @@ estimate_gate <- function(ff,
                                     all.cuts = TRUE,
                                     tinypeak.removal = tinypeak.removal)},
                error = function(e){warning(e); return(NA)}),
-      flowDensity::deGate(ff,
+      flowDensity::deGate(ff, # TODO: add try catch here, and ensure default is included
                           m,
                           use.upper = TRUE,
                           upper = TRUE

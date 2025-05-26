@@ -12,6 +12,7 @@ prep_FCS(
   pregate = TRUE,
   pregate_tf = TRUE,
   seed = 1,
+  output_dir = NULL,
   ...
 )
 }
@@ -38,6 +39,8 @@ Default = TRUE}
 \item{pregate}{Pregating information}
 
 \item{pregate_tf}{TransformList to use in pregating.}
+
+\item{output_dir}{If NULL (default) nothing is stored.}
 
 \item{...}{Extra arguments to pass to read.FCS}
 }
