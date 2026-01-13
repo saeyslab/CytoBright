@@ -13,7 +13,7 @@
 #'                      The name corresponding to the channel.
 #'
 #' @param return_cells  Boolean. If true, a list with cell values are returned
-#' @param seed          Seed for reproducability
+#' @param seed          Seed for reproducibility
 #' @param comp          Compensation matrix.
 #' @param transform Can either be a logical value or a transformList.
 #'                  If FALSE, no transform is applied. If TRUE (default),
@@ -24,6 +24,7 @@
 #' @param unstained     If this parameter is provided, it should contain a path
 #'                      to an fcs file. The unstained population will then be
 #'                      taken from this file rather than the single stain.
+#' @param estimate_spillover Estimate the spillover
 #'
 #' @importFrom flowCore read.FCS transform transformList arcsinhTransform colnames compensate
 #' @importFrom flowDensity deGate
