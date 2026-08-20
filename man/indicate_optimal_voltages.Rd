@@ -4,7 +4,7 @@
 \alias{indicate_optimal_voltages}
 \title{Estimate optimal SI for a single voltration}
 \usage{
-indicate_optimal_voltages(SI)
+indicate_optimal_voltages(SI, method = "plateau")
 }
 \arguments{
 \item{SI}{Dataframe with at least the following columns:

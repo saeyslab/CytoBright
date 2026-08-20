@@ -31,6 +31,8 @@ find_cutoff_FMO <- function(ff,
 #'                  default logicleTransform() is applied. If a transformList,
 #'                  this transformList is applied. Note that the value is
 #'                  returned in the original space.
+#' @param tinypeak.removal flowDensity parameter
+#' @param upper flowDensity parameter
 #' @param ... Other parameters to be passed to flowDensity
 #'
 #' @importFrom methods is
@@ -38,8 +40,13 @@ find_cutoff_FMO <- function(ff,
 #' @importFrom flowCore estimateLogicle transform
 #'
 #' @export
-find_cutoff_flowDensity <- function(ff, detector, transform = TRUE, ...) {
-  if (!transform) {
+find_cutoff_flowDensity <- function(ff,
+                                    detector,
+                                    transform = TRUE,
+                                    tinypeak.removal = 1/5,
+                                    upper = TRUE,
+                                    ...) {
+  if (isFALSE(transform)) {
     ff_t <- ff
   } else {
     if (!methods::is(transform, "transformList")) {
@@ -62,8 +69,8 @@ find_cutoff_flowDensity <- function(ff, detector, transform = TRUE, ...) {
   }
 
   cutoff <- flowDensity::deGate(ff_t, detector,
-    tinypeak.removal = 0.2,
-    upper = TRUE,
+    tinypeak.removal = tinypeak.removal,
+    upper = upper,
     ...
   )
 

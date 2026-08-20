@@ -10,6 +10,7 @@
 #' @param plot Boolean whether to plot
 #' @param plot_title Title for the plot. Default = "Gate"
 #' @param tinypeak.removal Passed to flowDensity::deGate, default 1/25
+#' @param ... Extra parameters to pass on to flowDensity
 #'
 #' @importFrom flowDensity deGate
 #' @importFrom flowCore fr_append_cols
@@ -29,14 +30,16 @@ estimate_gate <- function(ff,
                           ),
                           plot = FALSE,
                           plot_title = "Gate",
-                          tinypeak.removal = 1 / 25) {
+                          tinypeak.removal = 1 / 25,
+                          ...) {
   selection <- rep(TRUE, nrow(ff))
   for (m in names(marker_values)) {
     cutoffs <- c(
       tryCatch({flowDensity::deGate(ff,
                                     m,
                                     all.cuts = TRUE,
-                                    tinypeak.removal = tinypeak.removal)},
+                                    tinypeak.removal = tinypeak.removal,
+                                    ...)},
                error = function(e){warning(e); return(NA)}),
       flowDensity::deGate(ff, # TODO: add try catch here, and ensure default is included
                           m,
@@ -68,12 +71,17 @@ estimate_gate <- function(ff,
       m1 <- names(marker_values)[i]
       if (i + 1 <= length(marker_values)) {
         m2 <- names(marker_values)[i + 1]
-      } else {
+      } else if(m1 != colnames(ff)[1]){
         m1 <- colnames(ff)[1]
         marker_values[[m1]] <- c()
         marker_values[[m1]]["plot_min"] <- NA
         marker_values[[m1]]["plot_max"] <- NA
         m2 <- names(marker_values)[i]
+      } else if(m1 == colnames(ff)[1]){
+        m2 <- colnames(ff)[4]
+        marker_values[[m2]] <- c()
+        marker_values[[m2]]["plot_min"] <- NA
+        marker_values[[m2]]["plot_max"] <- NA
       }
 
 

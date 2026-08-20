@@ -1,0 +1,6 @@
+CHANGES IN VERSION 0.1.5
+-------------------------
+o separated estimate_spread from the estimate_brightness function
+o made it possible to pass additional arguments for flowDensity in estimate_gate
+o added an rSD threshold method to estimate the optimal voltage next to the plateau method
+o bugfix in prep_FCS if multiple paths to fcs files were given in the file argument

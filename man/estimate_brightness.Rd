@@ -13,8 +13,8 @@ estimate_brightness(
   unstained = NULL,
   remove_neg_from_single = FALSE,
   estimate_spillover = FALSE,
-  estimate_spread = FALSE,
-  silent = TRUE
+  silent = TRUE,
+  method = "plateau"
 )
 }
 \arguments{
@@ -46,6 +46,8 @@ returned in the original space.}
 to a preprocessed unstained fcs file. The positivity
 threshold will be defined on this sample, and the cells
 will be concatened to the single stain for the calculations.}
+
+\item{method}{"plateau" or "rSD threshold"}
 }
 \description{
 Estimate SI brightness from single stains

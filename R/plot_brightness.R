@@ -82,7 +82,7 @@ plot_brightness <- function(SI_optimal,
           group = .data$ID
         ),
         fill = "black",
-        size = 0.5
+        linewidth = 0.5
       ) +
       ggplot2::theme_minimal() +
       ggplot2::theme(

@@ -45,7 +45,8 @@ prep_FCS <- function(file,
       ff <- FlowSOM::AggregateFlowFrames(file,
                                          cTotal = 3000000,
                                          truncate_max_range = FALSE,
-                                         silent = TRUE)
+                                         silent = TRUE,
+                                         keepOrder = TRUE)
     }else {
       ff <- flowCore::read.FCS(file,
         truncate_max_range = FALSE,
@@ -228,10 +229,10 @@ prep_FCS <- function(file,
       flowCore::write.FCS(ff_gated, file.path(output_dir, filename))
     } else {
       for(i in seq_along(ff_gated)){
-        flowCore::write.FCS(ff_gated[[i]], file.path(output_dir, filename[1]))
+        flowCore::write.FCS(ff_gated[[i]], file.path(output_dir, filename[i]))
       }
     }
-    saveRDS(plot_list, file.path(output_dir, gsub(".fcs", "_plotlist.RDS", basename(file)[1])))
+    saveRDS(plot_list, file.path(output_dir, gsub(".fcs", "_plotlist.RDS", filename[1])))
     saveRDS(pregate_tf, file.path(output_dir, gsub(".fcs", "_tf.RDS", filename[1])))
   }
 

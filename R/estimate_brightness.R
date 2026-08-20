@@ -23,6 +23,7 @@
 #'                      to a preprocessed unstained fcs file. The positivity
 #'                      threshold will be defined on this sample, and the cells
 #'                      will be concatened to the single stain for the calculations.
+#' @param method "plateau" or "rSD threshold"
 #'
 #' @importFrom flowCore read.FCS transform transformList arcsinhTransform colnames compensate
 #' @importFrom flowDensity deGate
@@ -38,8 +39,8 @@ estimate_brightness <- function(single_stains,
                                 unstained = NULL,
                                 remove_neg_from_single = FALSE,
                                 estimate_spillover = FALSE,
-                                estimate_spread = FALSE,
-                                silent = TRUE) {
+                                silent = TRUE,
+                                method = "plateau") {
   rownames(single_stains) <- single_stains$ID
   detectors <- unique(single_stains$Detector)
 
@@ -58,7 +59,7 @@ estimate_brightness <- function(single_stains,
                                        emptyValue = FALSE)
   }
 
-  if(estimate_spillover | estimate_spread){
+  if(estimate_spillover){
     values_for_comp <- c(paste0("MFI_pos_", detectors),
                          paste0("MFI_neg_", detectors),
                          paste0("Comp_", detectors))
@@ -66,29 +67,18 @@ estimate_brightness <- function(single_stains,
     values_for_comp <- c()
   }
 
-  if(estimate_spread){
-    values_for_spread <- c(paste0("MFI_pos_c_", detectors),
-                           paste0("MFI_neg_c_", detectors),
-                           paste0("Spread_", detectors),
-                           paste0("SSI_", detectors))
-  } else {
-    values_for_spread <- c()
-  }
-
   SI <- data.frame(
     matrix(
       nrow = 0,
       ncol = ncol(single_stains) +
         length(values_of_interest) +
-        length(values_for_comp) +
-        length(values_for_spread),
+        length(values_for_comp),
       dimnames = list(
         NULL,
         c(
           colnames(single_stains),
           values_of_interest,
-          values_for_comp,
-          values_for_spread
+          values_for_comp
         )
       )
     ),
@@ -105,8 +95,8 @@ estimate_brightness <- function(single_stains,
 
     utils::setTxtProgressBar(pb, i)
 
-    id <- single_stains$ID[i]
-    file <- single_stains$File[i]
+    id <- single_stains[i, "ID"]
+    file <- single_stains[i, "File"]
     fluor <- single_stains[i, "Fluorochrome"]
     detector <- single_stains[i, "Detector"]
 
@@ -140,7 +130,7 @@ estimate_brightness <- function(single_stains,
                                         transform = transform)
     }
 
-    SI_tmp <- estimate_SI(
+    SI_tmp <- estimate_SI_single(
       ff = ff,
       detector = detector,
       cutoff = cutoff
@@ -157,22 +147,6 @@ estimate_brightness <- function(single_stains,
       SI[id, colnames(spillover_tmp)] <-  spillover_tmp
     }
 
-    if(estimate_spread){
-      if(is.null(comp)) { # Make empty identity matrix with only this detector filled out
-        comp_tmp <- diag(length(detectors))
-        colnames(comp_tmp) <- rownames(comp_tmp) <- detectors
-        comp_tmp[detector, ] <- unlist(spillover_tmp[, grep("Comp", colnames(spillover_tmp))])
-      } else {
-        comp_tmp <- comp
-      }
-
-      spread_tmp <- estimate_spread(ff = ff,
-                                    detector = detector,
-                                    SI = SI_tmp,
-                                    comp = comp_tmp)
-      SI[id, colnames(spread_tmp)] <-  spread_tmp
-    }
-
     if (return_cells) {
       set.seed(seed)
       cells <- rbind(
@@ -187,7 +161,7 @@ estimate_brightness <- function(single_stains,
 
   close(pb)
 
-  SI <- indicate_optimal_voltages(SI)
+  SI <- indicate_optimal_voltages(SI, method = method)
 
   return(list(
     SI = SI,
@@ -207,7 +181,7 @@ estimate_brightness <- function(single_stains,
 #' @importFrom stats quantile
 #' @importFrom Biobase pData
 #' @export
-estimate_SI <- function(ff,
+estimate_SI_single <- function(ff,
                         detector,
                         cutoff,
                         meta = data.frame(matrix(NA, nrow = 1, ncol = 0))) {
@@ -271,10 +245,11 @@ estimate_spillover <- function(ff,
 #' Extract a compensation matrix
 #'
 #' @param SI Result of estimate_brightness with estimate_spillover = TRUE
-#' @param singles_of_interest Rownames of the singles you want to include
+#' @param singles_of_interest Rownames of the singles you want to include.
+#'                            Default is all.
 #'
 #' @export
-extract_spillover <- function(SI, singles_of_interest){
+extract_spillover <- function(SI, singles_of_interest = seq_len(nrow(SI))){
   detectors <- SI[singles_of_interest, "Detector"]
   comp <- SI[singles_of_interest,
              paste0("Comp_", detectors)]
@@ -282,44 +257,190 @@ extract_spillover <- function(SI, singles_of_interest){
   return(comp)
 }
 
-estimate_spread <- function(ff,
-                            detector,
-                            SI,
-                            comp){
+#' Extract a SSM matrix
+#'
+#' @param SI Result of estimate_brightness with estimate_spread = TRUE
+#' @param singles_of_interest Rownames of the singles you want to include.
+#'                            Default is all.
+#'
+#' @export
+extract_spread <- function(SI,
+                           singles_of_interest = seq_len(nrow(SI)),
+                           detectors =  SI[singles_of_interest, "Detector"]){
+  comp <- SI[singles_of_interest,
+             paste0("Spread_", detectors)]
+  colnames(comp) <- gsub("Spread_", "", colnames(comp))
+  return(comp)
+}
 
-  pos <- flowCore::exprs(ff)[, detector] >= SI[["Cutoff"]]
-  neg <- flowCore::exprs(ff)[, detector] < SI[["Cutoff"]]
+# @param ff_pos    FlowFrame, assumed to already be compensated or unmixed,
+#                  containing only the positive population
+# @param ff_neg    FlowFrame, assumed to already be compensated or unmixed,
+#                  containing only the negative population
+# @param detector Detector to compute spread from
+# @param detectors_of_interest Detectors to compute spread to
+estimate_spread_single <- function(ff_pos,
+                                   ff_neg,
+                                   detector,
+                                   detectors_of_interest){
 
-  ff_c <- flowCore::compensate(ff, comp)
+  res <- matrix(NA, nrow = 1, ncol = 4*length(detectors_of_interest),
+                dimnames = list(NULL,
+                                c(paste0("Spread_", detectors_of_interest),
+                                  paste0("MFI_pos_c_", detectors_of_interest),
+                                  paste0("MFI_neg_c_", detectors_of_interest),
+                                  paste0("SSI_", detectors_of_interest))))
 
-  detectors <- colnames(comp)
-  for(detector2 in detectors){
-    d2_q05_neg <- quantile(ff_c@exprs[neg, detector2], 0.05)
-    d2_q50_neg <- quantile(ff_c@exprs[neg, detector2], 0.50)
-    d2_q84_neg <- quantile(ff_c@exprs[neg, detector2], 0.84)
-    d2_q95_neg <- quantile(ff_c@exprs[neg, detector2], 0.95)
-    d2_q50_pos <- quantile(ff_c@exprs[pos, detector2], 0.50)
-    d2_q84_pos <- quantile(ff_c@exprs[pos, detector2], 0.84)
+  MFI_pos <- quantile(ff_pos@exprs[, detector], 0.50)
+  MFI_neg <- quantile(ff_neg@exprs[, detector], 0.50)
+
+  for(detector2 in detectors_of_interest){
+
+    d2_q05_neg <- quantile(ff_neg@exprs[, detector2], 0.05)
+    d2_q50_neg <- quantile(ff_neg@exprs[, detector2], 0.50)
+    d2_q84_neg <- quantile(ff_neg@exprs[, detector2], 0.84)
+    d2_q95_neg <- quantile(ff_neg@exprs[, detector2], 0.95)
+
+    d2_q50_pos <- quantile(ff_pos@exprs[, detector2], 0.50)
+    d2_q84_pos <- quantile(ff_pos@exprs[, detector2], 0.84)
+
     d2_rsd_neg <- (d2_q95_neg - d2_q05_neg) / 3.29
     d2_sigma2_neg <- (d2_q84_neg - d2_q50_neg)^2
     d2_sigma2_pos <- (d2_q84_pos - d2_q50_pos)^2
 
     if(detector2 != detector & d2_sigma2_pos  > d2_sigma2_neg){
-      SI[paste0("Spread_", detector2)] <-
+      res[, paste0("Spread_", detector2)] <-
         sqrt(d2_sigma2_pos - d2_sigma2_neg) /
-        sqrt(SI["MFI_pos"] -  SI["MFI_neg"])
+        sqrt(MFI_pos -  MFI_neg)
     } else {
-      SI[paste0("Spread_", detector2)] <- 0
+      res[, paste0("Spread_", detector2)] <- 0
     }
 
-    SI[paste0("MFI_pos_c_", detector2)] <- d2_q50_pos
-    SI[paste0("MFI_neg_c_", detector2)] <- d2_q50_neg
+    res[, paste0("MFI_pos_c_", detector2)] <- d2_q50_pos
+    res[, paste0("MFI_neg_c_", detector2)] <- d2_q50_neg
     if(detector != detector2){
-      SI[paste0("SSI_", detector2)] <- (d2_q50_pos - d2_q50_neg) / (2 * d2_rsd_neg)
+      res[, paste0("SSI_", detector2)] <- (d2_q50_pos - d2_q50_neg) / (2 * d2_rsd_neg)
     } else {
-      SI[paste0("SSI_", detector2)] <- 0
+      res[, paste0("SSI_", detector2)] <- 0
     }
   }
 
-  return(SI)
+  return(res)
 }
+
+# parse_input_to_matrix <- function(input){
+#   if(is.character(input)){
+#     ff <- flowCore::read.FCS(file,
+#                              truncate_max_range = FALSE,
+#                              emptyValue = FALSE)
+#     flowCore::exprs(input)
+#   } else if (is(input, "flowFrame")){
+#     flowCore::exprs(input)
+#   } else if (is.data.frame(input)){
+#     input
+#   }
+# }
+
+
+#' Estimate spread on a number of single stains
+#'
+#' @param single_stains Data frame with ID, File, Fluorochrome and Detector columns
+#' @param transform     To be passed onto find_cutoff_flowDensity. If TRUE (default),
+#'                      estimateLogicle will be applied.
+#' @param unmixing_M    Unmixing matrix. Default NULL. If NULL, either assume
+#'                      the data is already unmixed, or it is not spectral data
+#' @param compensation_M Compensation matrix. Default NULL. If NULL, assume
+#'                       the data is already compensated or no compensation is
+#'                       necessary.
+#'
+#' @export
+estimate_spread <- function(single_stains,
+                            transform = TRUE,
+                            unmixing_M = NULL,
+                            compensation_M = NULL) {
+
+
+  rownames(single_stains) <- single_stains$ID
+
+  # Read 1 file to identify detectors
+  ff_tmp <- flowCore::read.FCS(single_stains$File[1], which.lines = 1,
+                               truncate_max_range = FALSE,
+                               emptyValue = FALSE)
+  detectors <- grep("SC|LightLoss|Img",
+                    grep("-A", colnames(ff_tmp), value = TRUE),
+                    invert = TRUE, value = TRUE)
+
+  pb <- utils::txtProgressBar(min = 0, max = nrow(single_stains), style = 3)
+
+  values_for_spread <- c(paste0("MFI_pos_c_", detectors),
+                         paste0("MFI_neg_c_", detectors),
+                         paste0("Spread_", detectors),
+                         paste0("SSI_", detectors))
+
+  res <- data.frame(
+    matrix(NA,
+           nrow = nrow(single_stains),
+           ncol = ncol(single_stains) + length(values_for_spread),
+           dimnames = list(rownames(single_stains),
+                           c(colnames(single_stains), values_for_spread))),
+    check.names = FALSE)
+
+  res[, colnames(single_stains)] <- single_stains # Copy meta info
+
+
+  for(i in seq_len(nrow(single_stains))) {
+
+    utils::setTxtProgressBar(pb, i)
+
+    id <- single_stains[i, "ID"]
+    file <- single_stains[i, "File"]
+    fluor <- single_stains[i, "Fluorochrome"]
+    detector <- single_stains[i, "Detector"]
+
+    ff <- flowCore::read.FCS(file,
+                             truncate_max_range = FALSE,
+                             emptyValue = FALSE)
+
+
+    cutoff <- find_cutoff_flowDensity(ff,
+                                      detector = detector,
+                                      transform = transform)
+
+    if (!is.null(unmixing_M)) {
+
+      # SpectralUnmixR::Unmix errors when no $FIL keyword present
+      if(is.null(flowCore::keyword(ff, "$FIL")[[1]])){
+        flowCore::keyword(ff)[["$FIL"]] <- "tmp"
+      }
+      ff_u <- SpectralUnmixR::Unmix(ff, unmixing_M, unmixing = "OLS")
+      ff_u <- flowFrame(as.matrix(ff_u$unmixed[,colnames(unmixing_M)]))
+      detector_u <- id
+      detectors_u <- colnames(unmixing_M)
+    } else {
+      ff_u <- ff
+      detector_u <- detector
+      detectors_u <- detectors
+    }
+
+    if (!is.null(compensation_M)) {
+      ff_c <- flowCore::compensate(ff_u, compensation_M)
+    } else {
+      ff_c <- ff_u
+    }
+
+    ff_pos <- ff_c[ff@exprs[,detector] >= cutoff, ]
+    ff_neg <- ff_c[ff@exprs[,detector] < cutoff, ]
+
+    spread_tmp <- estimate_spread_single(ff_pos = ff_pos,
+                                         ff_neg = ff_neg,
+                                         detector = detector_u,
+                                         detectors = detectors_u)
+    res[id, colnames(spread_tmp)] <-  spread_tmp
+
+  }
+
+  close(pb)
+
+  return(res)
+}
+

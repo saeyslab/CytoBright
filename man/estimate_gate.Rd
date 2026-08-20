@@ -10,7 +10,8 @@ estimate_gate(
     range_max = 50000), `SSC-A` = c(max = 80000, range_max = 50000)),
   plot = FALSE,
   plot_title = "Gate",
-  tinypeak.removal = 1/25
+  tinypeak.removal = 1/25,
+  ...
 )
 }
 \arguments{
@@ -28,6 +29,8 @@ the default value is returned (as passed in min or max).}
 \item{plot_title}{Title for the plot. Default = "Gate"}
 
 \item{tinypeak.removal}{Passed to flowDensity::deGate, default 1/25}
+
+\item{...}{Extra parameters to pass on to flowDensity}
 }
 \description{
 For pregating of a flowFrame

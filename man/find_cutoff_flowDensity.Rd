@@ -4,7 +4,14 @@
 \alias{find_cutoff_flowDensity}
 \title{Decide positivity cutoff with flowDensity}
 \usage{
-find_cutoff_flowDensity(ff, detector, transform = TRUE, ...)
+find_cutoff_flowDensity(
+  ff,
+  detector,
+  transform = TRUE,
+  tinypeak.removal = 1/5,
+  upper = TRUE,
+  ...
+)
 }
 \arguments{
 \item{ff}{FlowFrame to use}
@@ -17,6 +24,10 @@ flowcore::estimateLogicle is called, and if this fails, the
 default logicleTransform() is applied. If a transformList,
 this transformList is applied. Note that the value is
 returned in the original space.}
+
+\item{tinypeak.removal}{flowDensity parameter}
+
+\item{upper}{flowDensity parameter}
 
 \item{...}{Other parameters to be passed to flowDensity}
 }

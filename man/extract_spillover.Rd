@@ -4,12 +4,13 @@
 \alias{extract_spillover}
 \title{Extract a compensation matrix}
 \usage{
-extract_spillover(SI, singles_of_interest)
+extract_spillover(SI, singles_of_interest = seq_len(nrow(SI)))
 }
 \arguments{
 \item{SI}{Result of estimate_brightness with estimate_spillover = TRUE}
 
-\item{singles_of_interest}{Rownames of the singles you want to include}
+\item{singles_of_interest}{Rownames of the singles you want to include.
+Default is all.}
 }
 \description{
 Extract a compensation matrix
